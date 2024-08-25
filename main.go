@@ -64,20 +64,40 @@ func main() {
         log.Fatal("json.Unmarshal() failed: ", err)
     }
 
+    exercise_to_inspect := os.Args[1]
+    var inspection []SetDetails
+
     for _, session := range workout_data.Workout.Sessions {
         fmt.Printf("%s\n", session.Date.String())
         for _, sets := range session.Sets {
             for _, set := range sets {
-                fmt.Printf("name: %s, dropset: %d, reps: %s,  weight: %f\n", set.ExerciseName, set.DropSet, set.Reps, set.Weight)
+                if len(exercise_to_inspect) > 0 && set.ExerciseName == exercise_to_inspect {
+                    inspection = append(inspection, set)
+                }
+                fmt.Printf("name: %s, reps: %s,  weight: %f, dropset: %t\n", set.ExerciseName, set.Reps, set.Weight, set.DropSet)
             }
         }
     }
-}
-    //science_path := "./science.json"
-    //science_content, _ := os.ReadFile(science_path)
 
-    //var science Science
-    //err := json.Unmarshal(science_content, &science)
-    //if err != nil {
-    //    log.Fatal("error: could not read science content.", err)
-    //}
+    if len(exercise_to_inspect) == 0 {
+        return ;
+    }
+    fmt.Printf("Inspecting: %s\n", exercise_to_inspect)
+    for i := 0; i < len(inspection); i++{
+        if i == 0 {
+            fmt.Printf("First session :")
+        } else if i == len(inspection) - 1{ 
+            fmt.Printf("Latest session:")
+        }
+        fmt.Printf("%f, %s\n", inspection[i].Weight, inspection[i].Reps)
+    }
+}
+
+//science_path := "./science.json"
+//science_content, _ := os.ReadFile(science_path)
+
+//var science Science
+//err := json.Unmarshal(science_content, &science)
+//if err != nil {
+//    log.Fatal("error: could not read science content.", err)
+//}
