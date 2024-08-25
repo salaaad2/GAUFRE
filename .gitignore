@@ -1,3 +1,7 @@
 log.*
 gaufre
 dates
+newlog.json
+*_names
+oldlog.json
+prompt.txt
