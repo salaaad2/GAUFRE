@@ -1,18 +1,25 @@
 {
     "workout": {
-        "date": "01/02",
-        "sets": {
-            "set1": {
-                "exercise_name": "name1",
-                "weight": 10.1,
-                "reps": 10
-            },
-            "set2": {
-                "exercise_name": "name2",
-                "weight": 15.2,
-                "reps": 8,
-                "drop_set": false
+        "sessions":[
+            {
+                "date": "15/07",
+                "sets": [
+                    {
+                        "set1": {
+                            "exercise_name": "Lateral raise warmup",
+                            "weight": 35,
+                            "reps": "20",
+                            "drop_set": false
+                        },
+                        "set2": {
+                            "exercise_name": "chest press",
+                            "weight": 1000,
+                            "reps": "3 * 8 - 10",
+                            "drop_set": true
+                        }
+                    }
+                ]
             }
-        }
+        ]
     }
 }
