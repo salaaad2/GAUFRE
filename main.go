@@ -108,8 +108,10 @@ func lineFromInspectionMap(inspection map[CustomDate][]SetDetails, exercise_name
 	line.SetGlobalOptions(
 		charts.WithTitleOpts(opts.Title{
 			Title:    "Line chart for " + exercise_name,
-			Subtitle: "                                     total sets: " + strconv.Itoa(len(inspection)),
+			Subtitle: "total sets: " + strconv.Itoa(len(inspection)),
+			Right:    "40%",
 		}),
+		charts.WithLegendOpts(opts.Legend{Left: "60%"}),
 		charts.WithXAxisOpts(opts.XAxis{
 			Name: "Date",
 		}),
@@ -148,10 +150,22 @@ func lineFromInspectionMap(inspection map[CustomDate][]SetDetails, exercise_name
 			opts.MarkPointNameTypeItem{Name: "Minimum", Type: "min"},
 		),
 		charts.WithMarkPointStyleOpts(
-			opts.MarkPointStyle{Label: &opts.Label{Show: opts.Bool(true)}}),
+			opts.MarkPointStyle{Label: &opts.Label{Show: opts.Bool(true)}},
+		),
+		charts.WithLineChartOpts(
+			opts.LineChart{
+				Smooth: opts.Bool(true),
+			},
+		),
 	)
 	// reps line plot
-	line.AddSeries("reps: "+exercise_name, reps_data_y).SetXAxis(date_data_x)
+	line.AddSeries("reps: "+exercise_name, reps_data_y).SetXAxis(date_data_x).SetSeriesOptions(
+		charts.WithLineChartOpts(
+			opts.LineChart{
+				Smooth: opts.Bool(true),
+			},
+		),
+	)
 
 	// total weight bar chart (disabled for now)
 	bar := charts.NewBar()
