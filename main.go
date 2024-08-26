@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
-    "flag"
 
-	ui "github.com/gizak/termui/v3"
-	"github.com/gizak/termui/v3/widgets"
+	"github.com/go-echarts/go-echarts/v2/charts"
+	"github.com/go-echarts/go-echarts/v2/opts"
 )
 
 type CustomDate struct {
@@ -56,9 +58,8 @@ type Science struct {
 
 func main() {
 
-    show_bar := flag.Bool("bar_chart", false, "show a bar chart")
-    show_plot := flag.Bool("line_plot", false, "show a line plot")
-    flag.Parse()
+    //show_bar := flag.Bool("bar_chart", false, "show a bar chart")
+    //show_plot := flag.Bool("line_plot", false, "show a line plot")
     log_path := "./log.json"
     log_contents, err := os.ReadFile(log_path)
     if err != nil {
@@ -78,16 +79,18 @@ func main() {
     } else {
         exercise_to_inspect = os.Args[2]
     }
-    var inspection []SetDetails
+    var inspection map[CustomDate][]SetDetails
+    inspection = make(map[CustomDate][]SetDetails)
 
     for _, session := range workout_data.Workout.Sessions {
         fmt.Printf("%s\n", session.Date.String())
         for _, sets := range session.Sets {
             for _, set := range sets {
                 if len(exercise_to_inspect) > 0 && set.ExerciseName == exercise_to_inspect {
-                    inspection = append(inspection, set)
+                    inspection[session.Date] = append(inspection[session.Date], set)
                 }
-                fmt.Printf("name: %s, reps: %s, weight: %f, dropset: %t\n", set.ExerciseName, set.Reps, set.Weight, set.DropSet)
+                fmt.Printf("name: %s, reps: %s, weight: %f, dropset: %t\n",
+                    set.ExerciseName, set.Reps, set.Weight, set.DropSet)
             }
         }
     }
@@ -102,62 +105,123 @@ func main() {
         } else if i == len(inspection) - 1{ 
             fmt.Printf("Latest session:")
         }
-        fmt.Printf("%f, %s\n", inspection[i].Weight, inspection[i].Reps)
+        // fmt.Printf("%f, %s\n", inspection[i].Weight, inspection[i].Reps)
     }
-    
-    if err := ui.Init(); err != nil {
-        log.Fatal("failed to Init() termui.", err)
-    }
-    defer ui.Close()
-
-    if *show_plot {
-        line_plot := lineFromSetDetails(inspection)
-        ui.Render(line_plot)
-    } else if *show_bar {
-        bar_chart := barFromSetDetails(inspection)
-        ui.Render(bar_chart)
-    }
-    ui_events := ui.PollEvents()
-    for {
-        e := <-ui_events
-		switch e.ID {
-		case "q", "<C-c>":
-			return
-		}
-    }
+    lineFromInspectionMap(inspection)
 }
 
-func barFromSetDetails(set_details []SetDetails) *widgets.BarChart {
-   	bc := widgets.NewBarChart()
-	bc.Title = "Bar Chart"
-	bc.Labels = []string{}
-    t_width, t_height := ui.TerminalDimensions()
-    bc.SetRect(0, 0, t_width, t_height)
-    bc.BarWidth = 3
-    for i := 0 ; i < len(set_details); i++ {
-        bc.Labels = append(bc.Labels, set_details[i].Reps)
-        bc.Data = append(bc.Data, set_details[i].Weight)
-    }
-    bc.BarColors = []ui.Color{ui.ColorRed, ui.ColorYellow}
-	bc.LabelStyles = []ui.Style{ui.NewStyle(ui.ColorBlue)}
-	bc.NumStyles = []ui.Style{ui.NewStyle(ui.ColorWhite)}
-    return bc
+func lineFromInspectionMap(inspection map[CustomDate][]SetDetails) *charts.Line {
+    line := charts.NewLine()
+
+    line.SetGlobalOptions(
+        charts.WithTitleOpts(opts.Title{
+            Title: "Line chart for chest press",
+        }),
+   		charts.WithXAxisOpts(opts.XAxis{
+			Name: "Date",
+		}),
+		charts.WithYAxisOpts(opts.YAxis{
+			Name: "weight(kilos)",
+		}),
+    )
+
+	var keys []CustomDate
+	for key := range inspection {
+		keys = append(keys, key)
+	}
+
+	// Sort the map preemptively
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].Before(keys[j].Time)
+	})
+	sortedMap := make(map[CustomDate][]SetDetails)
+    var xAxisData []string
+    var yAxisData []opts.LineData
+    var repsData []opts.LineData
+	for _, key := range keys {
+		sortedMap[key] = inspection[key]
+        xAxisData = append(xAxisData, key.String())
+        for _, v := range sortedMap[key] {
+            yAxisData = append(yAxisData, opts.LineData{Value: v.Weight})
+            
+            repsData = append(repsData, opts.LineData{Value: getTotalReps(v.Reps)})
+        }
+	}
+
+    line.AddSeries("Chest weight", yAxisData).SetXAxis(xAxisData).SetSeriesOptions(
+			charts.WithMarkPointNameTypeItemOpts(
+				opts.MarkPointNameTypeItem{Name: "Maximum", Type: "max"},
+				opts.MarkPointNameTypeItem{Name: "Average", Type: "average"},
+				opts.MarkPointNameTypeItem{Name: "Minimum", Type: "min"},
+			),
+			charts.WithMarkPointStyleOpts(
+				opts.MarkPointStyle{Label: &opts.Label{Show: opts.Bool(true)}}),
+    )
+
+    line.AddSeries("Chest reps", repsData).SetXAxis(xAxisData)
+
+    // Render the chart to an HTML file
+	f, err := os.Create("line_chart.html")
+	if err != nil {
+		log.Fatalf("Failed to create file: %v", err)
+	}
+	defer f.Close()
+
+	if err := line.Render(f); err != nil {
+		log.Fatalf("Failed to render chart: %v", err)
+	}
+
+	log.Println("Line chart rendered to line_chart.html")
+    return line
 }
 
-func lineFromSetDetails(set_details []SetDetails) *widgets.Plot {
-   	lc := widgets.NewPlot()
-	lc.Title = "Default plot"
-    t_width, t_height := ui.TerminalDimensions()
-    lc.SetRect(0, 0, t_width, t_height)
-    lc.Data = make([][]float64, 2)
-    lc.Data[0] = make([]float64, 0)
-
-   for i := 0 ; i < len(set_details); i++ {
-        lc.Data[0] = append(lc.Data[0], set_details[i].Weight)
+func getTotalReps(reps_str string) int {
+    reps_nowhitespace := strings.ReplaceAll(reps_str, " ", "")
+    minus_index := strings.Index(reps_nowhitespace, "-")
+    if minus_index != -1 {
+        reps_nowhitespace = reps_nowhitespace[:minus_index]
     }
-   	lc.AxesColor = ui.ColorWhite
-	lc.LineColors[0] = ui.ColorGreen
-	lc.Marker = widgets.MarkerDot
-    lc.DotMarkerRune = '+'
-    return lc
+    split := strings.Split(reps_nowhitespace, "*")
+    if len(split) == 2 {
+        res1,_ := strconv.Atoi(split[0])
+        res2,_ := strconv.Atoi(split[1])
+        return res1 * res2
+    }
+    return 3*8
 }
+
+// func barFromSetDetails(set_details []SetDetails) *widgets.BarChart {
+//    	bc := widgets.NewBarChart()
+// 	bc.Title = "Bar Chart"
+// 	bc.Labels = []string{}
+//     t_width, t_height := ui.TerminalDimensions()
+//     bc.SetRect(0, 0, t_width, t_height)
+//     bc.BarWidth = 5
+//     for i := 0 ; i < len(set_details); i++ {
+//         bc.Labels = append(bc.Labels, set_details[i].Reps)
+//         bc.Data = append(bc.Data, set_details[i].Weight)
+//     }
+//     bc.BarColors = []ui.Color{ui.ColorRed, ui.ColorYellow}
+// 	bc.LabelStyles = []ui.Style{ui.NewStyle(ui.ColorBlue)}
+// 	bc.NumStyles = []ui.Style{ui.NewStyle(ui.ColorWhite)}
+//     return bc
+// }
+// 
+// func lineFromSetDetails(set_details []SetDetails) *widgets.Plot {
+//    	lc := widgets.NewPlot()
+// 	lc.Title = "Line"
+//     t_width, t_height := ui.TerminalDimensions()
+//     lc.SetRect(0, 0, t_width, t_height)
+//     lc.Data = make([][]float64, 2)
+//     lc.Data[0] = make([]float64, 0)
+//     lc.DataLabels = append(lc.DataLabels, "test")
+//     lc.DataLabels = append(lc.DataLabels, "test1")
+//    for i := 0 ; i < len(set_details); i++ {
+//         lc.Data[0] = append(lc.Data[0], set_details[i].Weight)
+//     }
+//    	lc.AxesColor = ui.ColorWhite
+// 	lc.LineColors[0] = ui.ColorGreen
+// 	lc.Marker = widgets.MarkerDot
+//     lc.DotMarkerRune = '+'
+//     return lc
+// }
