@@ -1,5 +1,10 @@
 # GAUFRE: Go AUtomated Fitness REcorder
 
+```bash
+go build && ./gaufre "Lat raise warmup"
+```
+![screenshot](./screenshot.png)
+
 ## How to run:
 
 Setup your data in a file called log.json, the run the program with the following options to see your progress.
