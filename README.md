@@ -19,6 +19,8 @@ Your exercise recordings nay not be in the expected format and it can be tedious
 
 I recommend giving your plaintext note or whatever to an AI that will do the translation to JSON for you.
 
+You can find a prompt for an LLM that will do exactly this in `prompt.txt`.
+
 ## TODO:
 - Muscle group pie chart
 - toggle off total weight by default

@@ -2,10 +2,9 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
+	"io"
 	"log"
 	"os"
-	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -40,88 +39,84 @@ type SetDetails struct {
 }
 
 type Session struct {
-    Sets []map[string]SetDetails `json:"sets"`
-    Date CustomDate `json:"date"`
+	Sets []map[string]SetDetails `json:"sets"`
+	Date CustomDate              `json:"date"`
 }
 
 type Workout struct {
-    Sessions []Session `json:"sessions"`
+	Sessions []Session `json:"sessions"`
 }
 
 type WorkoutData struct {
-	Workout Workout `json:"workout"`    
+	Workout Workout `json:"workout"`
 }
 
 type Science struct {
-    MusclesWorked []string
-    Name string
-    CaloriesBurnedBySet uint32
+	MusclesWorked       []string
+	Name                string
+	CaloriesBurnedBySet uint32
 }
 
 func main() {
-    log_path := "./log.json"
-    log_contents, err := os.ReadFile(log_path)
-    if err != nil {
-        log.Fatal("could not read ./log.json. Are you sure it exists ?", err)
-        return
-    }
+	log_path := "./log.json"
+	log_contents, err := os.ReadFile(log_path)
+	if err != nil {
+		log.Fatal("could not read ./log.json. Are you sure it exists ?", err)
+		return
+	}
 
-    var workout_data WorkoutData
-    err = json.Unmarshal(log_contents, &workout_data)
+	var workout_data WorkoutData
+	err = json.Unmarshal(log_contents, &workout_data)
 
-    if err != nil {
-        log.Fatal("json.Unmarshal() failed: ", err)
-        return
-    }
+	if err != nil {
+		log.Fatal("json.Unmarshal() failed: ", err)
+		return
+	}
 
-    var exercises_to_inspect []string
-    if len(os.Args) == 2 {
-        exercises_to_inspect = strings.Split(os.Args[1], ",")
-    } else {
-        log.Fatal("missing exercise name to inspect")
-    }
-    var inspection map[string]map[CustomDate][]SetDetails
-    inspection = make(map[string]map[CustomDate][]SetDetails)
-    
-
-    page := components.NewPage()
-    var charts []components.Charter
-    for _, exercise_name := range exercises_to_inspect {
-        inspection[exercise_name] = make(map[CustomDate][]SetDetails)
-        for _, session := range workout_data.Workout.Sessions {
-            for _, sets := range session.Sets {
-                for _, set := range sets {
-                    if set.ExerciseName == exercise_name {
-                        inspection[exercise_name][session.Date] = append(inspection[exercise_name][session.Date], set)
-                    }
-                }
-            }
-        }
-        charts = append(charts, lineFromInspectionMap(inspection[exercise_name], exercise_name))
-    }
-    page.AddCharts(charts...)
-    f, err := os.Create("line_chart.html")
-    if err != nil {
-        panic(err)
-    }
-    page.Render(io.MultiWriter(f))
+	var exercises_to_inspect []string
+	if len(os.Args) == 2 {
+		exercises_to_inspect = strings.Split(os.Args[1], ",")
+	} else {
+		log.Fatal("missing exercise name to inspect")
+	}
+	inspection := make(map[string]map[CustomDate][]SetDetails)
+	var charts []components.Charter
+	for _, exercise_name := range exercises_to_inspect {
+		inspection[exercise_name] = make(map[CustomDate][]SetDetails)
+		for _, session := range workout_data.Workout.Sessions {
+			for _, sets := range session.Sets {
+				for _, set := range sets {
+					if set.ExerciseName == exercise_name {
+						inspection[exercise_name][session.Date] = append(inspection[exercise_name][session.Date], set)
+					}
+				}
+			}
+		}
+		charts = append(charts, lineFromInspectionMap(inspection[exercise_name], exercise_name))
+	}
+	page := components.NewPage()
+	page.AddCharts(charts...)
+	f, err := os.Create("line_chart.html")
+	if err != nil {
+		panic(err)
+	}
+	page.Render(io.MultiWriter(f))
 }
 
 func lineFromInspectionMap(inspection map[CustomDate][]SetDetails, exercise_name string) *charts.Line {
-    line := charts.NewLine()
-
-    line.SetGlobalOptions(
-        charts.WithTitleOpts(opts.Title{
-            Title: "Line chart for " + exercise_name,
-            Subtitle: "                                     total sets: " + strconv.Itoa(len(inspection)),
-        }),
-   		charts.WithXAxisOpts(opts.XAxis{
+	line := charts.NewLine()
+	line.SetGlobalOptions(
+		charts.WithTitleOpts(opts.Title{
+			Title:    "Line chart for " + exercise_name,
+			Subtitle: "                                     total sets: " + strconv.Itoa(len(inspection)),
+		}),
+		charts.WithXAxisOpts(opts.XAxis{
 			Name: "Date",
 		}),
 		charts.WithYAxisOpts(opts.YAxis{
 			Name: "\nweight(kilos)",
 		}),
-    )
+	)
 
 	// Sort the map preemptively
 	var keys []CustomDate
@@ -131,54 +126,54 @@ func lineFromInspectionMap(inspection map[CustomDate][]SetDetails, exercise_name
 	sort.Slice(keys, func(i, j int) bool {
 		return keys[i].Before(keys[j].Time)
 	})
-	sortedMap := make(map[CustomDate][]SetDetails)
-    var xAxisData []string
-    var yAxisData []opts.LineData
-    var repsData []opts.LineData
-    var bar_data_y []opts.BarData
+	var date_data_x []string
+	var weight_data_y []opts.LineData
+	var reps_data_y []opts.LineData
+	var bar_data_y []opts.BarData
 	for _, key := range keys {
-		sortedMap[key] = inspection[key]
-        xAxisData = append(xAxisData, key.String())
-        for _, v := range sortedMap[key] {
-            yAxisData = append(yAxisData, opts.LineData{Value: v.Weight})
-            total_weight := getTotalReps(v.Reps)
-            repsData = append(repsData, opts.LineData{Value: total_weight})
-            bar_data_y = append(bar_data_y, opts.BarData{Value: v.Weight*float64(total_weight)})
-        }
+		date_data_x = append(date_data_x, key.String())
+		for _, v := range inspection[key] {
+			weight_data_y = append(weight_data_y, opts.LineData{Value: v.Weight})
+			total_weight := getTotalReps(v.Reps)
+			reps_data_y = append(reps_data_y, opts.LineData{Value: total_weight})
+			bar_data_y = append(bar_data_y, opts.BarData{Value: v.Weight * float64(total_weight)})
+		}
 	}
 
-    line.AddSeries("weight: " + exercise_name, yAxisData).SetXAxis(xAxisData).SetSeriesOptions(
-			charts.WithMarkPointNameTypeItemOpts(
-				opts.MarkPointNameTypeItem{Name: "Maximum", Type: "max"},
-				opts.MarkPointNameTypeItem{Name: "Average", Type: "average"},
-				opts.MarkPointNameTypeItem{Name: "Minimum", Type: "min"},
-			),
-			charts.WithMarkPointStyleOpts(
-				opts.MarkPointStyle{Label: &opts.Label{Show: opts.Bool(true)}}),
-    )
-    line.AddSeries("reps: " + exercise_name, repsData).SetXAxis(xAxisData)
+	// weight line plot
+	line.AddSeries("weight: "+exercise_name, weight_data_y).SetXAxis(date_data_x).SetSeriesOptions(
+		charts.WithMarkPointNameTypeItemOpts(
+			opts.MarkPointNameTypeItem{Name: "Maximum", Type: "max"},
+			opts.MarkPointNameTypeItem{Name: "Average", Type: "average"},
+			opts.MarkPointNameTypeItem{Name: "Minimum", Type: "min"},
+		),
+		charts.WithMarkPointStyleOpts(
+			opts.MarkPointStyle{Label: &opts.Label{Show: opts.Bool(true)}}),
+	)
+	// reps line plot
+	line.AddSeries("reps: "+exercise_name, reps_data_y).SetXAxis(date_data_x)
 
-    // total weight
-    bar := charts.NewBar()
-    bar.AddSeries("total_weight", bar_data_y).SetXAxis(xAxisData)
-   	var selected = map[string]bool{}
+	// total weight bar chart (disabled for now)
+	bar := charts.NewBar()
+	bar.AddSeries("total_weight", bar_data_y).SetXAxis(date_data_x)
+	var selected = map[string]bool{}
 	selected["total_weight"] = false
-    bar.Selected = selected
-    // line.Overlap(bar)
-    return line
+	bar.Selected = selected
+	// line.Overlap(bar)
+	return line
 }
 
 func getTotalReps(reps_str string) int {
-    reps_nowhitespace := strings.ReplaceAll(reps_str, " ", "")
-    minus_index := strings.Index(reps_nowhitespace, "-")
-    if minus_index != -1 {
-        reps_nowhitespace = reps_nowhitespace[:minus_index]
-    }
-    split := strings.Split(reps_nowhitespace, "*")
-    if len(split) == 2 {
-        res1,_ := strconv.Atoi(split[0])
-        res2,_ := strconv.Atoi(split[1])
-        return res1 * res2
-    }
-    return 3*8
+	reps_nowhitespace := strings.ReplaceAll(reps_str, " ", "")
+	minus_index := strings.Index(reps_nowhitespace, "-")
+	if minus_index != -1 {
+		reps_nowhitespace = reps_nowhitespace[:minus_index]
+	}
+	split := strings.Split(reps_nowhitespace, "*")
+	if len(split) == 2 {
+		res1, _ := strconv.Atoi(split[0])
+		res2, _ := strconv.Atoi(split[1])
+		return res1 * res2
+	}
+	return 3 * 8
 }

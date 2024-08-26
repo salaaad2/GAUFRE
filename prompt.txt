@@ -1,0 +1,23 @@
+I will provide you with a text file, containing details about my workouts. Translate the plaintext to json. if there are special characters such as accents or capital letters, use the letter without accents and use lowercase always. the output json file should be structured as such, based on the provided data:
+  "workout": {
+    "date": "01/02",
+    "sets": [
+      {
+        "set1": {
+          "exercise_name": "name1",
+          "weight": 10.1,
+          "reps": "10",
+          "drop_set": true
+        },
+        "set2":{
+          "exercise_name": "name2",
+          "weight": 20.1,
+          "reps": "12",
+          "drop_set": false
+        }
+      }
+    ]
+  }
+
+REPLY WITH THE WHOLE JSON FILE
+Here is the data:
