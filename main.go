@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-echarts/go-echarts/v2/charts"
+	"github.com/go-echarts/go-echarts/v2/components"
 	"github.com/go-echarts/go-echarts/v2/opts"
 )
 
@@ -57,13 +59,11 @@ type Science struct {
 }
 
 func main() {
-
-    //show_bar := flag.Bool("bar_chart", false, "show a bar chart")
-    //show_plot := flag.Bool("line_plot", false, "show a line plot")
     log_path := "./log.json"
     log_contents, err := os.ReadFile(log_path)
     if err != nil {
-        log.Fatal("could not read log file.", err)
+        log.Fatal("could not read ./log.json. Are you sure it exists ?", err)
+        return
     }
 
     var workout_data WorkoutData
@@ -71,66 +71,63 @@ func main() {
 
     if err != nil {
         log.Fatal("json.Unmarshal() failed: ", err)
+        return
     }
 
-    var exercise_to_inspect string 
+    var exercises_to_inspect []string
     if len(os.Args) == 2 {
-        exercise_to_inspect = os.Args[1]
+        exercises_to_inspect = strings.Split(os.Args[1], ",")
     } else {
-        exercise_to_inspect = os.Args[2]
+        log.Fatal("missing exercise name to inspect")
     }
-    var inspection map[CustomDate][]SetDetails
-    inspection = make(map[CustomDate][]SetDetails)
+    var inspection map[string]map[CustomDate][]SetDetails
+    inspection = make(map[string]map[CustomDate][]SetDetails)
+    
 
-    for _, session := range workout_data.Workout.Sessions {
-        fmt.Printf("%s\n", session.Date.String())
-        for _, sets := range session.Sets {
-            for _, set := range sets {
-                if len(exercise_to_inspect) > 0 && set.ExerciseName == exercise_to_inspect {
-                    inspection[session.Date] = append(inspection[session.Date], set)
+    page := components.NewPage()
+    var charts []components.Charter
+    for _, exercise_name := range exercises_to_inspect {
+        inspection[exercise_name] = make(map[CustomDate][]SetDetails)
+        for _, session := range workout_data.Workout.Sessions {
+            for _, sets := range session.Sets {
+                for _, set := range sets {
+                    if set.ExerciseName == exercise_name {
+                        inspection[exercise_name][session.Date] = append(inspection[exercise_name][session.Date], set)
+                    }
                 }
-                fmt.Printf("name: %s, reps: %s, weight: %f, dropset: %t\n",
-                    set.ExerciseName, set.Reps, set.Weight, set.DropSet)
             }
         }
+        charts = append(charts, lineFromInspectionMap(inspection[exercise_name], exercise_name))
     }
-
-    if len(exercise_to_inspect) == 0 {
-        return ;
+    page.AddCharts(charts...)
+    f, err := os.Create("line_chart.html")
+    if err != nil {
+        panic(err)
     }
-    fmt.Printf("Inspecting: %s\n", exercise_to_inspect)
-    for i := 0; i < len(inspection); i++{
-        if i == 0 {
-            fmt.Printf("First session :")
-        } else if i == len(inspection) - 1{ 
-            fmt.Printf("Latest session:")
-        }
-        // fmt.Printf("%f, %s\n", inspection[i].Weight, inspection[i].Reps)
-    }
-    lineFromInspectionMap(inspection)
+    page.Render(io.MultiWriter(f))
 }
 
-func lineFromInspectionMap(inspection map[CustomDate][]SetDetails) *charts.Line {
+func lineFromInspectionMap(inspection map[CustomDate][]SetDetails, exercise_name string) *charts.Line {
     line := charts.NewLine()
 
     line.SetGlobalOptions(
         charts.WithTitleOpts(opts.Title{
-            Title: "Line chart for chest press",
+            Title: "Line chart for " + exercise_name,
+            Subtitle: "                                     total sets: " + strconv.Itoa(len(inspection)),
         }),
    		charts.WithXAxisOpts(opts.XAxis{
 			Name: "Date",
 		}),
 		charts.WithYAxisOpts(opts.YAxis{
-			Name: "weight(kilos)",
+			Name: "\nweight(kilos)",
 		}),
     )
 
+	// Sort the map preemptively
 	var keys []CustomDate
 	for key := range inspection {
 		keys = append(keys, key)
 	}
-
-	// Sort the map preemptively
 	sort.Slice(keys, func(i, j int) bool {
 		return keys[i].Before(keys[j].Time)
 	})
@@ -138,17 +135,19 @@ func lineFromInspectionMap(inspection map[CustomDate][]SetDetails) *charts.Line 
     var xAxisData []string
     var yAxisData []opts.LineData
     var repsData []opts.LineData
+    var bar_data_y []opts.BarData
 	for _, key := range keys {
 		sortedMap[key] = inspection[key]
         xAxisData = append(xAxisData, key.String())
         for _, v := range sortedMap[key] {
             yAxisData = append(yAxisData, opts.LineData{Value: v.Weight})
-            
-            repsData = append(repsData, opts.LineData{Value: getTotalReps(v.Reps)})
+            total_weight := getTotalReps(v.Reps)
+            repsData = append(repsData, opts.LineData{Value: total_weight})
+            bar_data_y = append(bar_data_y, opts.BarData{Value: v.Weight*float64(total_weight)})
         }
 	}
 
-    line.AddSeries("Chest weight", yAxisData).SetXAxis(xAxisData).SetSeriesOptions(
+    line.AddSeries("weight: " + exercise_name, yAxisData).SetXAxis(xAxisData).SetSeriesOptions(
 			charts.WithMarkPointNameTypeItemOpts(
 				opts.MarkPointNameTypeItem{Name: "Maximum", Type: "max"},
 				opts.MarkPointNameTypeItem{Name: "Average", Type: "average"},
@@ -157,21 +156,15 @@ func lineFromInspectionMap(inspection map[CustomDate][]SetDetails) *charts.Line 
 			charts.WithMarkPointStyleOpts(
 				opts.MarkPointStyle{Label: &opts.Label{Show: opts.Bool(true)}}),
     )
+    line.AddSeries("reps: " + exercise_name, repsData).SetXAxis(xAxisData)
 
-    line.AddSeries("Chest reps", repsData).SetXAxis(xAxisData)
-
-    // Render the chart to an HTML file
-	f, err := os.Create("line_chart.html")
-	if err != nil {
-		log.Fatalf("Failed to create file: %v", err)
-	}
-	defer f.Close()
-
-	if err := line.Render(f); err != nil {
-		log.Fatalf("Failed to render chart: %v", err)
-	}
-
-	log.Println("Line chart rendered to line_chart.html")
+    // total weight
+    bar := charts.NewBar()
+    bar.AddSeries("total_weight", bar_data_y).SetXAxis(xAxisData)
+   	var selected = map[string]bool{}
+	selected["total_weight"] = false
+    bar.Selected = selected
+    // line.Overlap(bar)
     return line
 }
 
@@ -189,39 +182,3 @@ func getTotalReps(reps_str string) int {
     }
     return 3*8
 }
-
-// func barFromSetDetails(set_details []SetDetails) *widgets.BarChart {
-//    	bc := widgets.NewBarChart()
-// 	bc.Title = "Bar Chart"
-// 	bc.Labels = []string{}
-//     t_width, t_height := ui.TerminalDimensions()
-//     bc.SetRect(0, 0, t_width, t_height)
-//     bc.BarWidth = 5
-//     for i := 0 ; i < len(set_details); i++ {
-//         bc.Labels = append(bc.Labels, set_details[i].Reps)
-//         bc.Data = append(bc.Data, set_details[i].Weight)
-//     }
-//     bc.BarColors = []ui.Color{ui.ColorRed, ui.ColorYellow}
-// 	bc.LabelStyles = []ui.Style{ui.NewStyle(ui.ColorBlue)}
-// 	bc.NumStyles = []ui.Style{ui.NewStyle(ui.ColorWhite)}
-//     return bc
-// }
-// 
-// func lineFromSetDetails(set_details []SetDetails) *widgets.Plot {
-//    	lc := widgets.NewPlot()
-// 	lc.Title = "Line"
-//     t_width, t_height := ui.TerminalDimensions()
-//     lc.SetRect(0, 0, t_width, t_height)
-//     lc.Data = make([][]float64, 2)
-//     lc.Data[0] = make([]float64, 0)
-//     lc.DataLabels = append(lc.DataLabels, "test")
-//     lc.DataLabels = append(lc.DataLabels, "test1")
-//    for i := 0 ; i < len(set_details); i++ {
-//         lc.Data[0] = append(lc.Data[0], set_details[i].Weight)
-//     }
-//    	lc.AxesColor = ui.ColorWhite
-// 	lc.LineColors[0] = ui.ColorGreen
-// 	lc.Marker = widgets.MarkerDot
-//     lc.DotMarkerRune = '+'
-//     return lc
-// }
