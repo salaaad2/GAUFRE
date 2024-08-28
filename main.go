@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -59,13 +60,11 @@ type Science struct {
 }
 
 func main() {
-	month_flag := flag.String("month", "01", "The month you want to see data for")
+	var month string
+	flag.StringVar(&month, "selected_month", "aa", "The month you want to see data for")
 	flag.Parse()
 
-	single_month := false
-	if month_flag != nil {
-		single_month = true
-	}
+	fmt.Println(month)
 
 	log_path := "./log.json"
 	log_contents, err := os.ReadFile(log_path)
@@ -82,12 +81,16 @@ func main() {
 	}
 
 	var exercises_to_inspect []string
-	if len(os.Args) == 2 {
-		exercises_to_inspect = strings.Split(os.Args[1], ",")
-	} else {
+	if len(os.Args) <= 2 || len(os.Args) > 3 {
 		log.Fatal("Missing exercise name to inspect.\nUse ./print_exercises.sh to see which can be used.")
+	} else {
+		if strings.Contains(os.Args[1], "-") {
+			exercises_to_inspect = strings.Split(os.Args[2], ",")
+		} else {
+			exercises_to_inspect = strings.Split(os.Args[1], ",")
+		}
 	}
-	charts := makeCharts(workout_data, exercises_to_inspect)
+	charts := makeCharts(workout_data, exercises_to_inspect, month)
 
 	page := components.NewPage()
 	page.AddCharts(charts...)
@@ -98,12 +101,16 @@ func main() {
 	page.Render(io.MultiWriter(f))
 }
 
-func makeCharts(workout_data WorkoutData, exercises_to_inspect []string) []components.Charter {
+func makeCharts(workout_data WorkoutData, exercises_to_inspect []string, month string) []components.Charter {
 	var charts []components.Charter
 	inspection := make(map[string]map[CustomDate][]SetDetails)
 	for _, exercise_name := range exercises_to_inspect {
 		inspection[exercise_name] = make(map[CustomDate][]SetDetails)
 		for _, session := range workout_data.Workout.Sessions {
+			if len(month) != 0 && strings.ToLower(session.Date.Month().String()) != strings.ToLower(month) {
+				fmt.Printf("%s, %s\n", session.Date.Month().String(), month)
+				continue
+			}
 			for _, sets := range session.Sets {
 				for _, set := range sets {
 					if set.ExerciseName == exercise_name {
