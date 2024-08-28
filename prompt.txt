@@ -19,5 +19,6 @@ I will provide you with a text file, containing details about my workouts. Trans
     ]
   }
 
-REPLY WITH THE WHOLE JSON FILE
+REPLY WITH THE WHOLE JSON FILE. REPLACE LETTERS WITH ACCENTS WITH THEIR ASCII VERSION
+
 Here is the data:

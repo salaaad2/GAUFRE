@@ -159,10 +159,12 @@ func lineFromInspectionMap(inspection map[CustomDate][]SetDetails, exercise_name
 	sort.Slice(keys, func(i, j int) bool {
 		return keys[i].Before(keys[j].Time)
 	})
-	var date_data_x []string
-	var weight_data_y []opts.LineData
-	var reps_data_y []opts.LineData
-	var bar_data_y []opts.BarData
+	var (
+		date_data_x   []string
+		weight_data_y []opts.LineData
+		reps_data_y   []opts.LineData
+		bar_data_y    []opts.BarData
+	)
 	for _, key := range keys {
 		date_data_x = append(date_data_x, key.String())
 		for _, v := range inspection[key] {
