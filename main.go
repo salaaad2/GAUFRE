@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"io"
 	"log"
 	"os"
@@ -58,6 +59,14 @@ type Science struct {
 }
 
 func main() {
+	month_flag := flag.String("month", "01", "The month you want to see data for")
+	flag.Parse()
+
+	single_month := false
+	if month_flag != nil {
+		single_month = true
+	}
+
 	log_path := "./log.json"
 	log_contents, err := os.ReadFile(log_path)
 	if err != nil {
@@ -67,7 +76,6 @@ func main() {
 
 	var workout_data WorkoutData
 	err = json.Unmarshal(log_contents, &workout_data)
-
 	if err != nil {
 		log.Fatal("json.Unmarshal() failed: ", err)
 		return
@@ -77,23 +85,10 @@ func main() {
 	if len(os.Args) == 2 {
 		exercises_to_inspect = strings.Split(os.Args[1], ",")
 	} else {
-		log.Fatal("missing exercise name to inspect")
+		log.Fatal("Missing exercise name to inspect.\nUse ./print_exercises.sh to see which can be used.")
 	}
-	inspection := make(map[string]map[CustomDate][]SetDetails)
-	var charts []components.Charter
-	for _, exercise_name := range exercises_to_inspect {
-		inspection[exercise_name] = make(map[CustomDate][]SetDetails)
-		for _, session := range workout_data.Workout.Sessions {
-			for _, sets := range session.Sets {
-				for _, set := range sets {
-					if set.ExerciseName == exercise_name {
-						inspection[exercise_name][session.Date] = append(inspection[exercise_name][session.Date], set)
-					}
-				}
-			}
-		}
-		charts = append(charts, lineFromInspectionMap(inspection[exercise_name], exercise_name))
-	}
+	charts := makeCharts(workout_data, exercises_to_inspect)
+
 	page := components.NewPage()
 	page.AddCharts(charts...)
 	f, err := os.Create("line_chart.html")
@@ -101,6 +96,28 @@ func main() {
 		panic(err)
 	}
 	page.Render(io.MultiWriter(f))
+}
+
+func makeCharts(workout_data WorkoutData, exercises_to_inspect []string) []components.Charter {
+	var charts []components.Charter
+	inspection := make(map[string]map[CustomDate][]SetDetails)
+	for _, exercise_name := range exercises_to_inspect {
+		inspection[exercise_name] = make(map[CustomDate][]SetDetails)
+		for _, session := range workout_data.Workout.Sessions {
+			for _, sets := range session.Sets {
+				for _, set := range sets {
+					if set.ExerciseName == exercise_name {
+						inspection[exercise_name][session.Date] =
+							append(inspection[exercise_name][session.Date], set)
+					}
+				}
+			}
+		}
+		charts = append(
+			charts,
+			lineFromInspectionMap(inspection[exercise_name], exercise_name))
+	}
+	return charts
 }
 
 func lineFromInspectionMap(inspection map[CustomDate][]SetDetails, exercise_name string) *charts.Line {
@@ -158,6 +175,7 @@ func lineFromInspectionMap(inspection map[CustomDate][]SetDetails, exercise_name
 			},
 		),
 	)
+
 	// reps line plot
 	line.AddSeries("reps: "+exercise_name, reps_data_y).SetXAxis(date_data_x).SetSeriesOptions(
 		charts.WithLineChartOpts(
@@ -189,5 +207,6 @@ func getTotalReps(reps_str string) int {
 		res2, _ := strconv.Atoi(split[1])
 		return res1 * res2
 	}
+	// default: 3 sets of 8 reps
 	return 3 * 8
 }
