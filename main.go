@@ -61,10 +61,8 @@ type Science struct {
 
 func main() {
 	var month string
-	flag.StringVar(&month, "selected_month", "aa", "The month you want to see data for")
+	flag.StringVar(&month, "selected_month", "", "The month you want to see data for")
 	flag.Parse()
-
-	fmt.Println(month)
 
 	log_path := "./log.json"
 	log_contents, err := os.ReadFile(log_path)
@@ -81,7 +79,7 @@ func main() {
 	}
 
 	var exercises_to_inspect []string
-	if len(os.Args) <= 2 || len(os.Args) > 3 {
+	if len(os.Args) < 2 || len(os.Args) > 3 {
 		log.Fatal("Missing exercise name to inspect.\nUse ./print_exercises.sh to see which can be used.")
 	} else {
 		if strings.Contains(os.Args[1], "-") {
@@ -94,11 +92,21 @@ func main() {
 
 	page := components.NewPage()
 	page.AddCharts(charts...)
-	f, err := os.Create("line_chart.html")
+	var file_name string
+	if len(month) != 0 {
+		file_name = fmt.Sprintf(
+			"%s_%s.html",
+			month,
+			strings.ToLower(strings.ReplaceAll(strings.Join(exercises_to_inspect, "_"), " ", "_")))
+	} else {
+		file_name = "line_chart.html"
+	}
+	f, err := os.Create(file_name)
 	if err != nil {
 		panic(err)
 	}
 	page.Render(io.MultiWriter(f))
+	fmt.Println(file_name)
 }
 
 func makeCharts(workout_data WorkoutData, exercises_to_inspect []string, month string) []components.Charter {
@@ -108,7 +116,6 @@ func makeCharts(workout_data WorkoutData, exercises_to_inspect []string, month s
 		inspection[exercise_name] = make(map[CustomDate][]SetDetails)
 		for _, session := range workout_data.Workout.Sessions {
 			if len(month) != 0 && strings.ToLower(session.Date.Month().String()) != strings.ToLower(month) {
-				fmt.Printf("%s, %s\n", session.Date.Month().String(), month)
 				continue
 			}
 			for _, sets := range session.Sets {
